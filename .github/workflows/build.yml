@@ -33,4 +33,8 @@ jobs:
       uses: lukka/run-cmake@v10
       with:
         configurePreset: ${{ env.BUILD_TYPE }}
-        #buildPreset: ${{ env.BUILD_TYPE }}
+        
+    - name: build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }}
+
+      
