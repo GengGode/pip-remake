@@ -5,15 +5,15 @@
 #include <algorithm>
 #include <filesystem>
 
-void print_to_hex(const std::string& str);
-void remake_one_file(const std::string& exe_file, const std::string& target_path);
-void remake_all_files(const std::string& exe_root_dir, const std::string& target_path);
+void print_to_hex(const std::string &str);
+void remake_one_file(const std::string &exe_file, const std::string &target_path);
+void remake_all_files(const std::string &exe_root_dir, const std::string &target_path);
 
 // this application work remake pip.exe binary file
 // pip.exe has some hard coded path
 // so, this application will change the path to the current path
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     fmt::print(fg(fmt::color::blue_violet) | fmt::emphasis::faint, "[ Remake pip! ]\n");
 
@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
 
     // get exe file
     std::string exe_file = file_or_dir;
-    
+
     // check file
     std::ifstream ifs(exe_file, std::ios::binary);
     if (!ifs.is_open())
@@ -61,19 +61,31 @@ int main(int argc, char* argv[])
     return 0;
 }
 
-void print_to_hex(const std::string& str)
+void print_to_hex(const std::string &str)
 {
     for (char c : str)
     {
         if (!std::isprint(static_cast<unsigned char>(c)))
-            fmt::print(bg(fmt::color::gold) | fmt::emphasis::bold,"\\x{:02X}", static_cast<unsigned char>(c));
+            fmt::print(bg(fmt::color::gold) | fmt::emphasis::bold, "\\x{:02X}", static_cast<unsigned char>(c));
         else
-            fmt::print(fg(fmt::color::yellow) | fmt::emphasis::bold,"{}", c);
+            fmt::print(fg(fmt::color::yellow) | fmt::emphasis::bold, "{}", c);
     }
     fmt::print("\n");
 }
+std::string format_hex(const std::string &str)
+{
+    std::string result;
+    for (char c : str)
+    {
+        if (!std::isprint(static_cast<unsigned char>(c)))
+            result += fmt::format("\\x{:02X}", static_cast<unsigned char>(c));
+        else
+            result += c;
+    }
+    return result;
+}
 
-void remake_one_file(const std::string& exe_file, const std::string& target_path)
+void remake_one_file(const std::string &exe_file, const std::string &target_path)
 {
     // open file
     std::ifstream ifs(exe_file, std::ios::binary);
@@ -95,23 +107,63 @@ void remake_one_file(const std::string& exe_file, const std::string& target_path
         fmt::print(fg(fmt::color::crimson), "Failed to find path flag: {}\n", path_flag);
         return;
     }
+    print_to_hex(data.substr(pos, 10));
 
-    // find path end as ".exe"
-    std::string path_end = ".exe\x0A\x0D";
-    size_t pos_end = data.find(path_end, pos);
-    if (pos_end == std::string::npos)
+    // find begin quotation mark as "#!\""
+    bool is_has_begin_quotation_mark = false;
+    if (data[pos + path_flag.size()] == '\"')
     {
-        fmt::print(fg(fmt::color::crimson), "Failed to find path end: {}\n", path_end);
+        is_has_begin_quotation_mark = true;
+    }
+
+    // find path end as ".exe\x0A\x0D" or ".exe\"\x0A\x0D"
+    bool is_has_end_quotation_mark = false;
+    bool is_find_path_end = false;
+    size_t pos_end = 0;
+    {
+        std::string path_end = ".exe\x0A\x0D";
+        size_t find_pos_end = data.find(path_end, pos);
+        if (find_pos_end != std::string::npos)
+        {
+            is_find_path_end = true;
+            pos_end = find_pos_end;
+        }
+    }
+    {
+        std::string path_end = ".exe\x22\x0A\x0D";
+        size_t find_pos_end = data.find(path_end, pos);
+        is_has_end_quotation_mark = true;
+        if (find_pos_end != std::string::npos)
+        {
+            is_find_path_end = true;
+            pos_end = find_pos_end;
+        }
+    }
+    if (!is_find_path_end)
+    {
+        fmt::print(fg(fmt::color::crimson), "Failed to find path end, begin: {}\n", format_hex(data.substr(pos - 10, 20)));
         return;
     }
 
     // get old path
-    std::string old_path = data.substr(pos + path_flag.size(), pos_end + 4/* (".exe").size() */  - pos - path_flag.size());
+    std::string old_path = data.substr(pos + path_flag.size(), pos_end + 4 /* (".exe").size() */ - pos - path_flag.size());
     fmt::print(fg(fmt::color::beige) | fmt::emphasis::bold, "Old path: {}\n", old_path);
     fmt::print(fg(fmt::color::beige) | fmt::emphasis::bold, "New path: {}\n", target_path);
 
     // replace path
-    data.replace(pos + path_flag.size(), old_path.size() , target_path);
+    data.replace(pos + path_flag.size(), old_path.size(), target_path);
+
+    // if has quotation mark, in target insert end quotation mark
+    // if (is_has_end_quotation_mark)
+    //{
+    //    data.insert(pos + path_flag.size() + target_path.size(), "\"");
+    //}
+
+    // if has begin quotation mark, in target insert begin quotation mark
+    if (is_has_begin_quotation_mark)
+    {
+        data.insert(pos + path_flag.size(), "\"");
+    }
 
     // write file
     std::ofstream ofs(exe_file, std::ios::binary);
@@ -126,7 +178,7 @@ void remake_one_file(const std::string& exe_file, const std::string& target_path
     fmt::print(fg(fmt::color::green), "Success to remake {}!\n", exe_file);
 }
 
-void remake_all_files(const std::string& exe_root_dir, const std::string& target_path)
+void remake_all_files(const std::string &exe_root_dir, const std::string &target_path)
 {
     // open dir
     std::filesystem::path root_dir(exe_root_dir);
@@ -137,7 +189,7 @@ void remake_all_files(const std::string& exe_root_dir, const std::string& target
     }
 
     // find exe files
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(root_dir))
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(root_dir))
     {
         if (entry.is_regular_file() && entry.path().extension() == ".exe")
         {
